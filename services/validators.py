@@ -2,7 +2,7 @@ from heyoo import WhatsApp
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="validators", level="DEBUG", log_to_file=True).get_logger()
+log = LoggerManager(name="validators", level="DEBUG", log_to_file=False).get_logger()
 
 # Configuraciones
 MIN_MESSAGE_LENGTH = 2

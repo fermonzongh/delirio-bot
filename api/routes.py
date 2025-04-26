@@ -22,7 +22,7 @@ from services.validators import validate_message_content, validate_phone_country
 wa_client = WhatsApp(token=HEYOO_TOKEN, phone_number_id=HEYOO_PHONE_ID)
 
 # Instanciar el logger
-log = LoggerManager(name="routes", level="DEBUG", log_to_file=True).get_logger()
+log = LoggerManager(name="routes", level="DEBUG", log_to_file=False).get_logger()
 
 router = APIRouter()
 

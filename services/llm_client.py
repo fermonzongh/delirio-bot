@@ -14,7 +14,7 @@ from core.settings import (
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="llm_client", level="DEBUG", log_to_file=True).get_logger()
+log = LoggerManager(name="llm_client", level="DEBUG", log_to_file=False).get_logger()
 
 # Inicializa cliente Heyoo
 wa_client = WhatsApp(token=HEYOO_TOKEN, phone_number_id=HEYOO_PHONE_ID)

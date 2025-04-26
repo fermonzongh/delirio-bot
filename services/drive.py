@@ -17,7 +17,7 @@ from core.settings import (
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="drive", level="DEBUG", log_to_file=True).get_logger()
+log = LoggerManager(name="drive", level="DEBUG", log_to_file=False).get_logger()
 
 # Inicializa el cliente de Google Drive
 def get_drive_service():

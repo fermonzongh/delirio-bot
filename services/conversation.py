@@ -7,7 +7,7 @@ from core.settings import CONVERSATION_HISTORY_DIR, TAKEOVER_FILE
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="conversation", level="DEBUG", log_to_file=True).get_logger()
+log = LoggerManager(name="conversation", level="DEBUG", log_to_file=False).get_logger()
 
 # Asegurarse que el directorio exista
 os.makedirs(CONVERSATION_HISTORY_DIR, exist_ok=True)
