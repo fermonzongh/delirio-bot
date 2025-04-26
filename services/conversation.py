@@ -30,10 +30,16 @@ def load_takeover_status() -> Dict[str, dict]:
     return {}
 
 def save_takeover_status(status_dict: Dict[str, dict]) -> None:
+    """Guarda solo usuarios activos."""
+    active_status = {
+        phone: data
+        for phone, data in status_dict.items()
+        if data.get("active", False)
+    }
     try:
         with open(TAKEOVER_FILE, "w", encoding="utf-8") as f:
-            json.dump(status_dict, f, ensure_ascii=False, indent=2)
-        log.info("💾 Estado de takeover guardado correctamente.")
+            json.dump(active_status, f, ensure_ascii=False, indent=2)
+        log.info(f"💾 Estado de takeover guardado. Usuarios activos: {len(active_status)}")
     except Exception as e:
         log.error(f"❌ Error al guardar el archivo de takeover: {e}")
 
@@ -57,13 +63,13 @@ def set_human_takeover(phone_number: str, active: bool) -> None:
     if active:
         current_status[phone_number] = {
             "active": True,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "alerted": False  # 🚨 Inicialmente no avisado
         }
     else:
-        current_status[phone_number] = {
-            "active": False,
-            "timestamp": time.time()
-        }
+        # Eliminar el número si desactivamos takeover
+        if phone_number in current_status:
+            del current_status[phone_number]
 
     save_takeover_status(current_status)
     log.info(f"🛡️ Takeover {'activado' if active else 'desactivado'} para {phone_number}")

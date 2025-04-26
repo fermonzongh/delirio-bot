@@ -13,6 +13,7 @@ from services.conversation import (
     is_human_takeover,
     load_takeover_status,
     set_human_takeover,
+    save_takeover_status,
 )
 from services.llm_client import needs_human_takeover, notify_owner
 from services.llm_dispatcher import get_llm_response
@@ -108,8 +109,21 @@ async def heyoo_webhook(request: Request):
     add_to_conversation_history(sender_phone, "user", user_message)
 
     if is_human_takeover(sender_phone):
-        log.info(f"👤 Human takeover activo para {sender_phone}")
-        return {"status": "human takeover"}, 200
+        takeover_status = load_takeover_status()
+        record = takeover_status.get(sender_phone, {})
+
+        if not record.get("alerted", False):
+            # 🚨 Primera vez que escribe tras takeover
+            wa_client.send_message("Te atenderá un humano en breve. 🙋‍♂️", sender_phone)
+
+            # Marcar como alertado
+            record["alerted"] = True
+            takeover_status[sender_phone] = record
+            save_takeover_status(takeover_status)
+
+        # 🚀 PERO NO CORTAMOS ACÁ: seguimos procesando normalmente
+        log.info(f"✅ Takeover activo para {sender_phone}, pero seguimos respondiendo normalmente.")
+
 
     if needs_human_takeover(user_message):
         set_human_takeover(sender_phone, True)
