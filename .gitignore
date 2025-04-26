@@ -1,0 +1,8 @@
+.env
+venv*
+*pycache*
+__pycache__/
+
+service-account-key.json
+products_cache.json
+conversation_histories/*

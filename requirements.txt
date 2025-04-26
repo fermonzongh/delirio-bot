@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+twilio
+pandas
+httpx
+python-dotenv
+python-multipart
+google-auth
+google-api-python-client
+openpyxl   # Necesario si tu archivo de productos es .xlsx
+heyoo
