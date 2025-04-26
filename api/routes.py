@@ -128,7 +128,7 @@ async def heyoo_webhook(request: Request):
     if needs_human_takeover(user_message):
         set_human_takeover(sender_phone, True)
         log.info(f"👤 Activando human takeover para {sender_phone}")
-        wa_client.send_message("Un humano se contactará contigo a la brevedad.", sender_phone)
+        wa_client.send_message("Una persona se contactará contigo a la brevedad. Mientras tanto puedes consultar lo que necesites.", sender_phone)
         notify_owner(sender_phone, user_message)
         return {"status": "escalated"}, 200
 
