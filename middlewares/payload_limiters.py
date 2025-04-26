@@ -1,7 +1,11 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from core.logger import LoggerManager  # 🚀 Logger agregado
 
-# Configuracion: Tamaño máximo permitido (en bytes)
+# Instanciar logger
+log = LoggerManager(name="payload_limiter", level="DEBUG", log_to_file=True).get_logger()
+
+# Configuración: Tamaño máximo permitido (en bytes)
 MAX_PAYLOAD_SIZE = 50 * 1024  # 50 KB
 
 async def limit_payload_size(request: Request, call_next):
@@ -12,7 +16,7 @@ async def limit_payload_size(request: Request, call_next):
     body = await request.body()
 
     if len(body) > MAX_PAYLOAD_SIZE:
-        print(f"🚨 Payload rechazado: {len(body)} bytes (límite {MAX_PAYLOAD_SIZE} bytes)")
+        log.warning(f"🚨 Payload rechazado: {len(body)} bytes (límite {MAX_PAYLOAD_SIZE} bytes)")
         return JSONResponse(
             status_code=413,  # HTTP 413 Payload Too Large
             content={"detail": "Request payload too large"}

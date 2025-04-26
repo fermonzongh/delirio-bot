@@ -4,6 +4,10 @@ import time
 from typing import List, Dict, Any
 
 from core.settings import CONVERSATION_HISTORY_DIR, TAKEOVER_FILE
+from core.logger import LoggerManager  # 🚀 Logger agregado
+
+# Instanciar logger
+log = LoggerManager(name="conversation", level="DEBUG", log_to_file=True).get_logger()
 
 # Asegurarse que el directorio exista
 os.makedirs(CONVERSATION_HISTORY_DIR, exist_ok=True)
@@ -11,7 +15,6 @@ os.makedirs(CONVERSATION_HISTORY_DIR, exist_ok=True)
 # Función utilitaria
 def sanitize_phone(phone: str) -> str:
     return phone.replace(":", "_").replace("+", "").replace("whatsapp", "")
-
 
 # -----------------------------
 # Gestión de Takeover Humano
@@ -22,12 +25,17 @@ def load_takeover_status() -> Dict[str, dict]:
             with open(TAKEOVER_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except json.JSONDecodeError:
+            log.warning("⚠️ Error al leer el archivo de takeover, devolviendo vacío.")
             return {}
     return {}
 
 def save_takeover_status(status_dict: Dict[str, dict]) -> None:
-    with open(TAKEOVER_FILE, "w", encoding="utf-8") as f:
-        json.dump(status_dict, f, ensure_ascii=False, indent=2)
+    try:
+        with open(TAKEOVER_FILE, "w", encoding="utf-8") as f:
+            json.dump(status_dict, f, ensure_ascii=False, indent=2)
+        log.info("💾 Estado de takeover guardado correctamente.")
+    except Exception as e:
+        log.error(f"❌ Error al guardar el archivo de takeover: {e}")
 
 def is_human_takeover(phone_number: str, expiration_seconds: int = 180) -> bool:
     status = load_takeover_status()
@@ -37,7 +45,7 @@ def is_human_takeover(phone_number: str, expiration_seconds: int = 180) -> bool:
         timestamp = record.get("timestamp", 0)
         elapsed = time.time() - timestamp
         if elapsed > expiration_seconds:
-            print(f"⚠️ Takeover expirado para {phone_number} después de {elapsed:.1f} segundos")
+            log.warning(f"⚠️ Takeover expirado para {phone_number} después de {elapsed:.1f} segundos")
             set_human_takeover(phone_number, False)
             return False
         return True
@@ -58,8 +66,7 @@ def set_human_takeover(phone_number: str, active: bool) -> None:
         }
 
     save_takeover_status(current_status)
-
-
+    log.info(f"🛡️ Takeover {'activado' if active else 'desactivado'} para {phone_number}")
 
 # -----------------------------
 # Historial de Conversaciones
@@ -71,16 +78,15 @@ def get_conversation_history(phone_number: str, max_age_seconds: int = 120) -> L
     if os.path.exists(filepath):
         file_age = time.time() - os.path.getmtime(filepath)
         if file_age > max_age_seconds:
-            print(f"⚠️ Conversación antigua descartada ({file_age:.1f} seg)")
+            log.warning(f"⚠️ Conversación antigua descartada para {phone_number} ({file_age:.1f} segundos)")
             return []  # Resetear conversación
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 return json.load(f)
         except json.JSONDecodeError:
-            print("❌ Error al decodificar JSON de conversación, iniciando vacío")
+            log.error(f"❌ Error al decodificar historial de conversación para {phone_number}, iniciando vacío")
             return []
     return []
-
 
 def add_to_conversation_history(phone_number: str, role: str, content: str) -> List[Dict[str, Any]]:
     history = get_conversation_history(phone_number)
@@ -101,8 +107,8 @@ def add_to_conversation_history(phone_number: str, role: str, content: str) -> L
     try:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(history, f, ensure_ascii=False, indent=2)
-        print(f"💾 Conversación actualizada para {phone_number}")
+        log.info(f"💾 Conversación actualizada para {phone_number}")
     except Exception as e:
-        print(f"❌ Error al guardar historial para {phone_number}: {e}")
+        log.error(f"❌ Error al guardar historial para {phone_number}: {e}")
 
     return history
