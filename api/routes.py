@@ -65,14 +65,15 @@ async def heyoo_webhook(request: Request):
         wa_client.send_message("Solo puedo procesar mensajes de texto por ahora. 📄", sender_phone)
         return {"status": "unsupported_message_type"}, 200
     
+    # Extraer mensaje de texto
+    user_message = message_entry["text"]["body"]
+
     # Validar si es prompt injection
     if detect_prompt_injection(user_message):
         print(f"🚨 Intento de Prompt Injection detectado de {sender_phone}")
         wa_client.send_message("Tu mensaje no puede ser procesado. ¿Podrías reformularlo?", sender_phone)
         return {"status": "prompt_injection_blocked"}, 200
 
-    # Extraer mensaje de texto
-    user_message = message_entry["text"]["body"]
 
     # Validar contenido del mensaje
     validation_content = validate_message_content(user_message, sender_phone, wa_client)
