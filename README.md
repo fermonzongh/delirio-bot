@@ -17,23 +17,23 @@ Este es un bot de WhatsApp para negocios de salsas picantes que utiliza AI para 
 ## Estructura del Proyecto
 
 delirio-bot/
-├── main.py                  # Punto de entrada FastAPI
-├── api/
-│   ├── routes.py             # Webhook y envío manual
-│   └── health.py             # Healthcheck avanzado
-├── core/
-│   └── settings.py           # Variables de entorno
-├── services/
-│   ├── conversation.py       # Historial y takeover
-│   ├── drive.py              # Productos desde Google Drive
-│   ├── llm_client.py         # Lógica de consultas a IA
-│   ├── llm_dispatcher.py     # Selección de proveedor IA dinámico
-│   ├── security.py           # Firma de Webhook
-│   └── validators.py         # Validaciones de input y seguridad
-├── models/
-│   └── schemas.py            # Modelos de datos Pydantic
-├── requirements.txt          # Dependencias
-└── .env                      # Variables sensibles (no subir)
+* main.py — Punto de entrada FastAPI
+* api/
+  * routes.py — Webhook y envío manual
+  * health.py — Healthcheck avanzado
+* core/
+  * settings.py — Variables de entorno
+* services/
+  * conversation.py — Historial y takeover
+  * drive.py — Productos desde Google Drive
+  * llm_client.py — Lógica de consultas a IA
+  * llm_dispatcher.py — Selección de proveedor IA dinámico
+  * security.py — Firma de Webhook
+  * validators.py — Validaciones de input y seguridad
+* models/
+  * schemas.py — Modelos de datos Pydantic
+* requirements.txt — Dependencias
+* .env — Variables sensibles (no subir)
 
 ## Instalación
 
