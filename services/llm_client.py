@@ -157,7 +157,6 @@ def needs_human_takeover(message: str) -> bool:
     return any(kw in msg for kw in keywords)
 
 def notify_owner(customer_phone: str, message: str) -> None:
-    print(type(OWNER_PHONE_NUMBER))
     wa_client.send_message(
         f"⚠️ El cliente {customer_phone} pidió hablar con una persona.\nMensaje: {message}",
         OWNER_PHONE_NUMBER  # Usamos variable correcta

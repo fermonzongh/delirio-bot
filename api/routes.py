@@ -142,7 +142,7 @@ async def heyoo_webhook(request: Request):
         response_text = "Estamos experimentando dificultades. ¿Querés que te conecte con una persona?"
 
     add_to_conversation_history(sender_phone, "assistant", response_text)
-    print(type(sender_phone))
+
     wa_client.send_message(response_text, sender_phone)
 
     # ✅ 5. Respuesta final
