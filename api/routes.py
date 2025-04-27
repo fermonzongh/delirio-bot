@@ -1,199 +1,213 @@
 from fastapi import APIRouter, HTTPException, Request
 from heyoo import WhatsApp
+from typing import Dict, Any, Tuple
 
 from core.settings import HEYOO_PHONE_ID, HEYOO_TOKEN
-from core.logger import LoggerManager  # 🚀 Logger agregado
+from core.logger import LoggerManager
 from models.schemas import MessageRequest
 from services.security import verify_webhook_signature
-from services.conversation import (
-    add_to_conversation_history,
-    get_conversation_history,
-    get_name_from_conversation,
-    is_human_takeover,
-    load_takeover_status,
-    set_human_takeover,
-    save_takeover_status,
-    set_customer_name,
-)
-from services.llm_client import needs_human_takeover, notify_owner
+from services.conversation import conversation_service
+from services.llm_client import llm_client
 from services.llm_dispatcher import get_llm_response
-from services.validators import validate_message_content, validate_phone_country, detect_prompt_injection, es_nombre_valido, is_real_name_with_gpt
-from services.user_profiles import extract_name_with_llm  # Si estás usando LLM
-from services.audio_processing import process_audio_message  # Si estás usando LLM
+from services.validators import (
+    validate_message_content,
+    validate_phone_country,
+    detect_prompt_injection,
+    es_nombre_valido,
+    is_real_name_with_gpt
+)
+from services.user_profiles import extract_name_with_llm
+from services.audio_processing import audio_processor
 
-# Instanciar el cliente de WhatsApp
-wa_client = WhatsApp(token=HEYOO_TOKEN, phone_number_id=HEYOO_PHONE_ID)
-
-# Instanciar el logger
-log = LoggerManager(name="routes", level="INFO", log_to_file=False).get_logger()
-
-router = APIRouter()
-
-@router.get("/webhook")
-def verify_webhook(request: Request):
-    params = request.query_params
-    if params.get("hub.verify_token") == "HolaAI":
-        return int(params.get("hub.challenge"))
-    return "Token inválido", 403
-
-@router.post("/webhook")
-async def heyoo_webhook(request: Request):
-    # 🚨 Verificar firma
-    header_signature = request.headers.get("X-Hub-Signature-256") or request.headers.get("X-Hub-Signature")
-    body = await request.body()
-
-    if not verify_webhook_signature(body, header_signature):
-        log.error("🚨 Webhook con firma inválida bloqueado")
-        raise HTTPException(status_code=403, detail="Invalid signature")
-
-    # 🚨 Parsear JSON
-    try:
-        data = await request.json()
-        # 🚀 Parsear datos del mensaje
-        value = data["entry"][0]["changes"][0]["value"]
-        if "statuses" in value:
-            # 📩 Caso de status de entrega
-            status_entry = value["statuses"][0]
-            status = status_entry.get("status")
-            message_id = status_entry.get("id")
-            recipient_id = status_entry.get("recipient_id")
-            timestamp = status_entry.get("timestamp")
-
-            log.debug(f"📩 Status recibido:")
-            log.debug(f"  - Mensaje ID: {message_id}")
-            log.debug(f"  - Estado: {status}")
-            log.debug(f"  - Destinatario: {recipient_id}")
-            log.debug(f"  - Timestamp: {timestamp}")
-
-            return {"status": "status_logged"}, 200
+class WhatsAppRouter:
+    def __init__(self):
+        """Initialize the WhatsApp router with all required services."""
+        self.router = APIRouter()
+        self.wa_client = WhatsApp(token=HEYOO_TOKEN, phone_number_id=HEYOO_PHONE_ID)
+        self.log = LoggerManager(name="routes", level="INFO", log_to_file=False).get_logger()
         
-        # 🚨 Si no es STATUS, validamos que tenga MENSAJE
-        if "messages" not in value:
-            log.warning("⚠️ Webhook sin 'messages' ni 'statuses'. Ignorando.")
-            return {"status": "ignored"}, 200
+        # Register routes
+        self._register_routes()
         
-        # 🚀 Caso normal de mensaje
-        message_entry = value["messages"][0]
-        sender_phone = message_entry["from"]
+    def _register_routes(self):
+        """Register all routes with the router."""
+        self.router.get("/webhook")(self.verify_webhook)
+        self.router.post("/webhook")(self.heyoo_webhook)
+        self.router.post("/send")(self.send_manual_message)
+        
+    async def verify_webhook(self, request: Request) -> Any:
+        """Verify webhook endpoint for WhatsApp API setup."""
+        params = request.query_params
+        if params.get("hub.verify_token") == "HolaAI":
+            return int(params.get("hub.challenge"))
+        return "Token inválido", 403
+    
+    async def _handle_status_message(self, value: Dict[str, Any]) -> Tuple[Dict[str, str], int]:
+        """Handle status message from WhatsApp."""
+        status_entry = value["statuses"][0]
+        status = status_entry.get("status")
+        message_id = status_entry.get("id")
+        recipient_id = status_entry.get("recipient_id")
+        timestamp = status_entry.get("timestamp")
 
-        # 🚨 Validaciones
-        validation_country = validate_phone_country(sender_phone, wa_client)
-        if not validation_country["valid"]:
-            return {"status": validation_country["status"]}, 200
-        
+        self.log.debug(f"📩 Status recibido:")
+        self.log.debug(f"  - Mensaje ID: {message_id}")
+        self.log.debug(f"  - Estado: {status}")
+        self.log.debug(f"  - Destinatario: {recipient_id}")
+        self.log.debug(f"  - Timestamp: {timestamp}")
+
+        return {"status": "status_logged"}, 200
+    
+    async def _process_message(self, message_entry: Dict[str, Any], sender_phone: str) -> str:
+        """Process incoming message and return the message content."""
         if message_entry.get("type") != "text":
             if message_entry.get("type") == "audio":
                 media_id = message_entry["audio"]["id"]
-                user_message = await process_audio_message(media_id)
+                return await audio_processor.process_audio_message(media_id)
             elif message_entry.get("type") == "reaction":
-                return {"status": "reaction_received"}, 200
+                return "reaction"
             else:
-                log.warning(f"⚠️ Mensaje no sorportado recibido de {sender_phone} tipo: {message_entry.get('type')}")
-                wa_client.send_message("No puedo procesar este tipo de mensaje. ¿Podrías enviarme un mensaje de texto?", sender_phone)
-                return {"status": "unsupported_media"}, 200
-            
-        else:
-            user_message = message_entry["text"]["body"]
-        
-        if detect_prompt_injection(user_message):
-            log.warning(f"🚨 Intento de Prompt Injection detectado de {sender_phone}")
-            wa_client.send_message("Tu mensaje no puede ser procesado. ¿Podrías reformularlo?", sender_phone)
-            return {"status": "prompt_injection_blocked"}, 200
-
-        validation_content = validate_message_content(user_message, sender_phone, wa_client)
-        if not validation_content["valid"]:
-            return {"status": validation_content["status"]}, 200
-        
-        # 🚀 Extraer perfil
-        profile_info = value.get("contacts", [{}])[0].get("profile", {})
-        user_name = profile_info.get("name")
-
-        # 🚀 Cargar historial
-        conversation = get_conversation_history(sender_phone)
-
-        # 🚀 Saludo inteligente
-        saludo = None
-        if not get_name_from_conversation(sender_phone):
-            if not conversation:
+                self.log.warning(f"⚠️ Mensaje no sorportado recibido de {sender_phone} tipo: {message_entry.get('type')}")
+                self.wa_client.send_message(
+                    "No puedo procesar este tipo de mensaje. ¿Podrías enviarme un mensaje de texto?",
+                    sender_phone
+                )
+                return "unsupported"
+        return message_entry["text"]["body"]
+    
+    async def _handle_new_user(self, sender_phone: str, user_name: str) -> str:
+        """Handle new user interaction and return appropriate greeting."""
+        if not conversation_service.get_name_from_conversation(sender_phone):
+            if not conversation_service.get_conversation_history(sender_phone):
                 if user_name and es_nombre_valido(user_name):
                     if await is_real_name_with_gpt(user_name):
-                        set_customer_name(sender_phone, user_name)
-                        saludo = f"¡Hola {user_name}! Soy Kitu 🌶️ de Delirio Picante, ¿en qué puedo ayudarte?"
-                    else:
-                        saludo = "¡Hola! Soy Kitu 🌶️ de Delirio Picante. ¿Querés decirme tu nombre para reconocerte mejor en próximas consultas? 🌶️"
-                else:
-                    saludo = "¡Hola! Soy Kitu 🌶️ de Delirio Picante. ¿Querés decirme tu nombre para reconocerte mejor en próximas consultas? 🌶️"
+                        conversation_service.set_customer_name(sender_phone, user_name)
+                        return f"¡Hola {user_name}! Soy Kitu 🌶️ de Delirio Picante, ¿en qué puedo ayudarte?"
+                return "¡Hola! Soy Kitu 🌶️ de Delirio Picante. ¿Querés decirme tu nombre para reconocerte mejor en próximas consultas? 🌶️"
+        return ""
 
-                wa_client.send_message(saludo, sender_phone)
-                add_to_conversation_history(sender_phone, "assistant", saludo)
-                log.info(f"👋 Saludo enviado a {sender_phone}: {saludo}")
+    async def heyoo_webhook(self, request: Request) -> Tuple[Dict[str, str], int]:
+        """Handle incoming webhook from WhatsApp."""
+        # Verify signature
+        header_signature = request.headers.get("X-Hub-Signature-256") or request.headers.get("X-Hub-Signature")
+        body = await request.body()
 
-    except Exception as e:
-        log.error(f"⚠️ Error al parsear mensaje o status: {e}")
+        if not verify_webhook_signature(body, header_signature):
+            self.log.error("🚨 Webhook con firma inválida bloqueado")
+            raise HTTPException(status_code=403, detail="Invalid signature")
+
         try:
-            log.error(f"Payload recibido: {data['entry'][0]['changes'][0]['value']}")
-        except:
-            log.error("No se pudo imprimir el valor del webhook recibido.")
-        return {"status": "ignored"}, 200
+            data = await request.json()
+            value = data["entry"][0]["changes"][0]["value"]
 
-    # 🚀 Procesamiento de conversación
-    add_to_conversation_history(sender_phone, "user", user_message)
+            # Handle status messages
+            if "statuses" in value:
+                return await self._handle_status_message(value)
 
-    if saludo:
-        add_to_conversation_history(sender_phone, "assistant", saludo)
-    
-    if not get_name_from_conversation(sender_phone):
-        log.info(f"📝 Nombre no encontrado en conversación para {sender_phone}. Intentando extraer...")
-        detected_name = await extract_name_with_llm(user_message)
+            # Validate message exists
+            if "messages" not in value:
+                self.log.warning("⚠️ Webhook sin 'messages' ni 'statuses'. Ignorando.")
+                return {"status": "ignored"}, 200
 
-        if detected_name:
-            set_customer_name(sender_phone, detected_name)
-            add_to_conversation_history(sender_phone, "assistant", f"Guardé tu nombre como {detected_name}")
-            log.info(f"📝 Nombre aprendido para {sender_phone}: {detected_name}")
+            # Process message
+            message_entry = value["messages"][0]
+            sender_phone = message_entry["from"]
 
-    if is_human_takeover(sender_phone):
-        takeover_status = load_takeover_status()
-        record = takeover_status.get(sender_phone, {})
+            # Validate phone
+            validation_country = validate_phone_country(sender_phone, self.wa_client)
+            if not validation_country["valid"]:
+                return {"status": validation_country["status"]}, 200
 
-        if not record.get("alerted", False):
-            # Marcar como alertado
-            record["alerted"] = True
-            takeover_status[sender_phone] = record
-            save_takeover_status(takeover_status)
+            # Process message content
+            user_message = await self._process_message(message_entry, sender_phone)
+            if user_message in ["reaction", "unsupported"]:
+                return {"status": f"{user_message}_received"}, 200
 
-        # 🚀 Seguimos procesando normalmente
-        log.info(f"✅ Takeover activo para {sender_phone}, pero seguimos respondiendo normalmente.")
+            # Check for prompt injection
+            if detect_prompt_injection(user_message):
+                self.log.warning(f"🚨 Intento de Prompt Injection detectado de {sender_phone}")
+                self.wa_client.send_message(
+                    "Tu mensaje no puede ser procesado. ¿Podrías reformularlo?",
+                    sender_phone
+                )
+                return {"status": "prompt_injection_blocked"}, 200
 
+            # Validate message content
+            validation_content = validate_message_content(user_message, sender_phone, self.wa_client)
+            if not validation_content["valid"]:
+                return {"status": validation_content["status"]}, 200
 
-    if needs_human_takeover(user_message):
-        set_human_takeover(sender_phone, True)
-        log.info(f"👤 Activando human takeover para {sender_phone}")
-        wa_client.send_message("Una persona se contactará contigo a la brevedad. Mientras tanto puedes consultar lo que necesites.", sender_phone)
-        await notify_owner(sender_phone, get_conversation_history(sender_phone))
-        return {"status": "escalated"}, 200
+            # Get user profile and handle new user
+            profile_info = value.get("contacts", [{}])[0].get("profile", {})
+            user_name = profile_info.get("name")
+            
+            saludo = await self._handle_new_user(sender_phone, user_name)
+            if saludo:
+                self.wa_client.send_message(saludo, sender_phone)
+                conversation_service.add_to_conversation_history(sender_phone, "assistant", saludo)
+                self.log.info(f"👋 Saludo enviado a {sender_phone}: {saludo}")
 
-    conversation = get_conversation_history(sender_phone)
+            # Add user message to history
+            conversation_service.add_to_conversation_history(sender_phone, "user", user_message)
 
-    try:
-        log.info(f"🧠 Consultando modelo IA para {sender_phone}")
-        response_text = await get_llm_response(user_message, conversation)
-    except Exception as e:
-        log.error(f"⚠️ Error consultando IA: {e}")
-        response_text = "Estamos experimentando dificultades. ¿Querés que te conecte con una persona?"
+            # Try to extract name if not known
+            if not conversation_service.get_name_from_conversation(sender_phone):
+                self.log.info(f"📝 Nombre no encontrado en conversación para {sender_phone}. Intentando extraer...")
+                detected_name = await extract_name_with_llm(user_message)
+                if detected_name:
+                    conversation_service.set_customer_name(sender_phone, detected_name)
+                    conversation_service.add_to_conversation_history(
+                        sender_phone,
+                        "assistant",
+                        f"Guardé tu nombre como {detected_name}"
+                    )
+                    self.log.info(f"📝 Nombre aprendido para {sender_phone}: {detected_name}")
 
-    add_to_conversation_history(sender_phone, "assistant", response_text)
+            # Check for human takeover
+            if llm_client.needs_human_takeover(user_message):
+                conversation_service.set_human_takeover(sender_phone, True)
+                self.log.info(f"👤 Activando human takeover para {sender_phone}")
+                self.wa_client.send_message(
+                    "Una persona se contactará contigo a la brevedad. Mientras tanto puedes consultar lo que necesites.",
+                    sender_phone
+                )
+                await llm_client.notify_owner(sender_phone, conversation_service.get_conversation_history(sender_phone))
+                return {"status": "escalated"}, 200
 
-    wa_client.send_message(response_text, sender_phone)
+            # Get AI response
+            try:
+                self.log.info(f"🧠 Consultando modelo IA para {sender_phone}")
+                response_text = await get_llm_response(
+                    user_message,
+                    conversation_service.get_conversation_history(sender_phone)
+                )
+            except Exception as e:
+                self.log.error(f"⚠️ Error consultando IA: {e}")
+                response_text = "Estamos experimentando dificultades. ¿Querés que te conecte con una persona?"
 
-    # ✅ Respuesta final
-    return {"status": "responded"}, 200
+            # Send response
+            conversation_service.add_to_conversation_history(sender_phone, "assistant", response_text)
+            self.wa_client.send_message(response_text, sender_phone)
 
-@router.post("/send")
-async def send_manual_message(request: MessageRequest):
-    try:
-        wa_client.send_message(request.message, request.to)
-        add_to_conversation_history(request.to, "assistant", request.message)
-        return {"success": True, "message": "Mensaje enviado correctamente"}
-    except Exception as e:
-        log.error(f"⚠️ Error enviando mensaje manual: {e}")
-        raise HTTPException(status_code=500, detail=f"No se pudo enviar el mensaje: {str(e)}")
+            return {"status": "responded"}, 200
+
+        except Exception as e:
+            self.log.error(f"⚠️ Error al parsear mensaje o status: {e}")
+            try:
+                self.log.error(f"Payload recibido: {data['entry'][0]['changes'][0]['value']}")
+            except:
+                self.log.error("No se pudo imprimir el valor del webhook recibido.")
+            return {"status": "ignored"}, 200
+
+    async def send_manual_message(self, request: MessageRequest) -> Dict[str, Any]:
+        """Send a manual message to a WhatsApp user."""
+        try:
+            self.wa_client.send_message(request.message, request.to)
+            conversation_service.add_to_conversation_history(request.to, "assistant", request.message)
+            return {"success": True, "message": "Mensaje enviado correctamente"}
+        except Exception as e:
+            self.log.error(f"⚠️ Error enviando mensaje manual: {e}")
+            raise HTTPException(status_code=500, detail=f"No se pudo enviar el mensaje: {str(e)}")
+
+# Create router instance
+router = WhatsAppRouter().router
