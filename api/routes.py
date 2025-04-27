@@ -168,7 +168,7 @@ class WhatsAppRouter:
                 conversation_service.set_human_takeover(sender_phone, True)
                 self.log.info(f"👤 Activando human takeover para {sender_phone}")
                 self.wa_client.send_message(
-                    "Una persona se contactará contigo a la brevedad. Mientras tanto puedes consultar lo que necesites.",
+                    "Una persona se contactará contigo a la brevedad. Mientras tanto puedes consultarme lo que necesites.",
                     sender_phone
                 )
                 await llm_client.notify_owner(sender_phone, conversation_service.get_conversation_history(sender_phone))

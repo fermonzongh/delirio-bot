@@ -338,9 +338,3 @@ class LLMClient:
 
 # Create a singleton instance
 llm_client = LLMClient()
-
-# Export commonly used methods as standalone functions for backwards compatibility
-needs_human_takeover = llm_client.needs_human_takeover
-notify_owner = llm_client.notify_owner
-ask_claude = llm_client.ask_claude
-ask_gpt = llm_client.ask_gpt
