@@ -1,12 +1,17 @@
+import httpx
+import re
+
 from heyoo import WhatsApp
+
 from core.logger import LoggerManager  # 🚀 Logger agregado
+from core.settings import OPENAI_API_KEY, OPENAI_MODEL
 
 # Instanciar logger
-log = LoggerManager(name="validators", level="DEBUG", log_to_file=False).get_logger()
+log = LoggerManager(name="validators", level="INFO", log_to_file=False).get_logger()
 
 # Configuraciones
 MIN_MESSAGE_LENGTH = 2
-MAX_MESSAGE_LENGTH = 1000
+MAX_MESSAGE_LENGTH = 200
 ALLOWED_COUNTRY_PREFIX = "54"
 
 def validate_message_content(user_message: str, sender_phone: str, wa_client: WhatsApp) -> dict:
@@ -19,10 +24,10 @@ def validate_message_content(user_message: str, sender_phone: str, wa_client: Wh
         wa_client.send_message("No entendí tu mensaje, ¿podrías escribirlo de nuevo? ✍️", sender_phone)
         return {"valid": False, "status": "empty_message"}
 
-    if len(user_message.strip()) < MIN_MESSAGE_LENGTH:
-        log.warning(f"⚠️ Mensaje demasiado corto de {sender_phone}: {user_message}")
-        wa_client.send_message("Tu mensaje es muy corto, ¿podrías darme más detalles? 📄", sender_phone)
-        return {"valid": False, "status": "short_message"}
+    # if len(user_message.strip()) < MIN_MESSAGE_LENGTH:
+    #     log.warning(f"⚠️ Mensaje demasiado corto de {sender_phone}: {user_message}")
+    #     wa_client.send_message("Tu mensaje es muy corto, ¿podrías darme más detalles? 📄", sender_phone)
+    #     return {"valid": False, "status": "short_message"}
 
     if len(user_message) > MAX_MESSAGE_LENGTH:
         log.warning(f"⚠️ Mensaje demasiado largo de {sender_phone}: {len(user_message)} caracteres")
@@ -64,3 +69,39 @@ def detect_prompt_injection(user_message: str) -> bool:
             return True
 
     return False
+
+def es_nombre_valido(nombre: str) -> bool:
+    """Verifica si contiene al menos una letra."""
+    if not nombre:
+        return False
+    return bool(re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nombre))
+
+async def is_real_name_with_gpt(nombre: str) -> bool:
+    """Pregunta a GPT si el texto parece ser un nombre real."""
+    prompt = f'Dado el siguiente texto, dime solamente "Sí" si parece un nombre real de persona, o "No" si no lo es:\n"{nombre}"'
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": OPENAI_MODEL,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 3,
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            text = result["choices"][0]["message"]["content"].strip().lower()
+            return "sí" in text or "si" in text
+    except Exception as e:
+        # 🚨 No rompemos flujo si falla GPT
+        print(f"⚠️ Error validando nombre con GPT: {e}")
+        return False

@@ -7,7 +7,7 @@ from core.settings import CONVERSATION_HISTORY_DIR, TAKEOVER_FILE
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="conversation", level="DEBUG", log_to_file=False).get_logger()
+log = LoggerManager(name="conversation", level="INFO", log_to_file=False).get_logger()
 
 # Asegurarse que el directorio exista
 os.makedirs(CONVERSATION_HISTORY_DIR, exist_ok=True)
@@ -30,7 +30,6 @@ def load_takeover_status() -> Dict[str, dict]:
     return {}
 
 def save_takeover_status(status_dict: Dict[str, dict]) -> None:
-    """Guarda solo usuarios activos."""
     active_status = {
         phone: data
         for phone, data in status_dict.items()
@@ -64,10 +63,9 @@ def set_human_takeover(phone_number: str, active: bool) -> None:
         current_status[phone_number] = {
             "active": True,
             "timestamp": time.time(),
-            "alerted": False  # 🚨 Inicialmente no avisado
+            "alerted": False
         }
     else:
-        # Eliminar el número si desactivamos takeover
         if phone_number in current_status:
             del current_status[phone_number]
 
@@ -77,44 +75,88 @@ def set_human_takeover(phone_number: str, active: bool) -> None:
 # -----------------------------
 # Historial de Conversaciones
 # -----------------------------
-def get_conversation_history(phone_number: str, max_age_seconds: int = 120) -> List[Dict[str, Any]]:
+def _get_conversation_filepath(phone_number: str) -> str:
     filename = sanitize_phone(phone_number) + ".json"
-    filepath = os.path.join(CONVERSATION_HISTORY_DIR, filename)
+    return os.path.join(CONVERSATION_HISTORY_DIR, filename)
 
+def load_conversation_file(phone_number: str) -> dict:
+    filepath = _get_conversation_filepath(phone_number)
     if os.path.exists(filepath):
-        file_age = time.time() - os.path.getmtime(filepath)
-        if file_age > max_age_seconds:
-            log.warning(f"⚠️ Conversación antigua descartada para {phone_number} ({file_age:.1f} segundos)")
-            return []  # Resetear conversación
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except json.JSONDecodeError:
-            log.error(f"❌ Error al decodificar historial de conversación para {phone_number}, iniciando vacío")
-            return []
-    return []
+        except Exception as e:
+            log.error(f"❌ Error al leer conversación para {phone_number}: {e}")
+    return {}
+
+def save_conversation_file(phone_number: str, data: dict) -> None:
+    filepath = _get_conversation_filepath(phone_number)
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        log.info(f"💾 Conversación guardada para {phone_number}")
+    except Exception as e:
+        log.error(f"❌ Error al guardar conversación para {phone_number}: {e}")
+
+def get_name_from_conversation(phone_number: str) -> str:
+    data = load_conversation_file(phone_number)
+    if not data:
+        return ""
+
+    name = data.get("name", "")
+    if not name:
+        log.warning(f"⚠️ Nombre no encontrado en conversación para {phone_number}")
+    return name
+
+def get_conversation_history(phone_number: str, max_age_seconds: int = 84600) -> List[Dict[str, Any]]:
+    data = load_conversation_file(phone_number)
+
+    if not data:
+        return []
+
+    last_updated = data.get("last_updated", 0)
+    if time.time() - last_updated > max_age_seconds:
+        # ⚠️ Conversación vieja, limpiamos historial pero mantenemos el resto
+        data["history"] = []
+        data["last_updated"] = time.time()
+        save_conversation_file(phone_number, data)
+        log.warning(f"⚠️ Conversación vieja limpiada para {phone_number}")
+        return []
+
+    return data.get("history", [])
 
 def add_to_conversation_history(phone_number: str, role: str, content: str) -> List[Dict[str, Any]]:
-    history = get_conversation_history(phone_number)
+    data = load_conversation_file(phone_number)
 
+    if not data:
+        data = {
+            "phone_number": phone_number,
+            "name": "",  # Podemos completarlo después
+            "last_updated": time.time(),
+            "history": []
+        }
+
+    history = data.get("history", [])
     history.append({
         "role": role,
         "content": content,
         "timestamp": time.time()
     })
 
-    # Limita el historial a los últimos 20 mensajes
+    # Limitar historial
     if len(history) > 20:
         history = history[-20:]
 
-    filename = sanitize_phone(phone_number) + ".json"
-    filepath = os.path.join(CONVERSATION_HISTORY_DIR, filename)
+    data["history"] = history
+    data["last_updated"] = time.time()
 
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-        log.info(f"💾 Conversación actualizada para {phone_number}")
-    except Exception as e:
-        log.error(f"❌ Error al guardar historial para {phone_number}: {e}")
-
+    save_conversation_file(phone_number, data)
     return history
+
+def set_customer_name(phone_number: str, name: str) -> None:
+    """Permite guardar el nombre real del usuario cuando se descubre."""
+    data = load_conversation_file(phone_number)
+    data["name"] = name
+    data["last_updated"] = time.time()
+    save_conversation_file(phone_number, data)
+    log.info(f"👤 Nombre actualizado para {phone_number}: {name}")

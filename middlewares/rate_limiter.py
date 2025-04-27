@@ -4,10 +4,10 @@ from fastapi.responses import JSONResponse
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="rate_limiter", level="DEBUG", log_to_file=False).get_logger()
+log = LoggerManager(name="rate_limiter", level="INFO", log_to_file=False).get_logger()
 
 # Configuraciones
-MAX_MESSAGES_PER_MINUTE = 10
+MAX_MESSAGES_PER_MINUTE = 15
 WINDOW_SECONDS = 60
 
 # Almacén de rate limiting en memoria

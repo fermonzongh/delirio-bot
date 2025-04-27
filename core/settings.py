@@ -18,7 +18,7 @@ PRODUCT_LIST_FILE_ID = os.getenv("PRODUCT_LIST_FILE_ID")
 CATALOG_PDF_FILE_ID = os.getenv("CATALOG_PDF_FILE_ID")
 CATALOG_PDF_LINK = f"https://drive.google.com/file/d/{CATALOG_PDF_FILE_ID}/view?usp=sharing"
 SERVICE_ACCOUNT_FILE = "service-account-key.json"
-PRODUCTS_CACHE_FILE = "products_cache.json"
+PRODUCTS_CACHE_FILE = "data/products_cache.json"
 
 # WhatsApp via Heyoo
 HEYOO_TOKEN = os.getenv("HEYOO_TOKEN")
@@ -26,7 +26,7 @@ HEYOO_PHONE_ID = os.getenv("HEYOO_PHONE_ID")
 OWNER_PHONE_NUMBER = os.getenv("OWNER_PHONE_NUMBER")
 
 # Conversaciones
-CONVERSATION_HISTORY_DIR = "conversation_histories"
-TAKEOVER_FILE = "takeover_status.json"
+CONVERSATION_HISTORY_DIR = "data/conversation_histories"
+TAKEOVER_FILE = "data/takeover_status.json"
 
 APP_SECRET = os.getenv("APP_SECRET")  # Cambia esto por tu secreto real

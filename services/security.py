@@ -5,7 +5,7 @@ from core.settings import APP_SECRET
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="security", level="DEBUG", log_to_file=False).get_logger()
+log = LoggerManager(name="security", level="INFO", log_to_file=False).get_logger()
 
 def verify_webhook_signature(body: bytes, header_signature: str) -> bool:
     """Verifica que el webhook provenga de Meta/Heyoo usando la firma HMAC-SHA256."""

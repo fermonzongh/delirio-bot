@@ -17,7 +17,7 @@ from core.settings import (
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="drive", level="DEBUG", log_to_file=False).get_logger()
+log = LoggerManager(name="drive", level="INFO", log_to_file=False).get_logger()
 
 # Inicializa el cliente de Google Drive
 def get_drive_service():
@@ -38,7 +38,7 @@ def load_products_from_drive():
             last_modified = time.time() - os.path.getmtime(PRODUCTS_CACHE_FILE)
             log.debug(f"⏱️ Tiempo desde última modificación: {last_modified:.2f} segundos")
 
-            if last_modified < 3600:
+            if last_modified < 86400:  # 1 día en segundos
                 with open(PRODUCTS_CACHE_FILE, "r", encoding="utf-8") as f:
                     log.info("📦 Cargando productos desde cache local")
                     try:
@@ -46,7 +46,7 @@ def load_products_from_drive():
                     except Exception as e:
                         log.error(f"❌ Error al cargar productos de la cache: {e}")
             else:
-                log.warning("⚠️ Cache vencida (más de 1 hora)")
+                log.warning("⚠️ Cache vencida (más de 1 día)")
         else:
             log.info("📭 Cache no existe aún")
     except Exception as e:
@@ -121,6 +121,7 @@ def get_product_info_string():
             if "heat_level" in product:
                 lines.append(f"Nivel de picante: {product.get('heat_level')}")
             lines.append(f"Stock: {product.get('Stock', 0)}")
+            lines.append(f"Tamaño: {product.get('Tamaño', 'Desconocido')}")
             lines.append("")  # línea en blanco
         except Exception as e:
             log.error(f"❌ Error procesando un producto: {e}")

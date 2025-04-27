@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from core.logger import LoggerManager  # 🚀 Logger agregado
 
 # Instanciar logger
-log = LoggerManager(name="payload_limiter", level="DEBUG", log_to_file=False).get_logger()
+log = LoggerManager(name="payload_limiter", level="INFO", log_to_file=False).get_logger()
 
 # Configuración: Tamaño máximo permitido (en bytes)
 MAX_PAYLOAD_SIZE = 50 * 1024  # 50 KB

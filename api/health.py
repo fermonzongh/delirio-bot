@@ -10,7 +10,7 @@ router = APIRouter()
 wa_client = WhatsApp(token=HEYOO_TOKEN, phone_number_id=HEYOO_PHONE_ID)
 
 # Instanciar el logger
-log = LoggerManager(name="health", level="DEBUG", log_to_file=False).get_logger()
+log = LoggerManager(name="health", level="INFO", log_to_file=False).get_logger()
 
 # Funciones placeholder (a desarrollar)
 def check_google_drive() -> bool:
