@@ -1,83 +1,107 @@
 import httpx
 import tempfile
+from typing import Optional
 
 from core.settings import HEYOO_TOKEN, OPENAI_API_KEY
 from core.logger import LoggerManager
 
-log = LoggerManager(name="audio_processor", level="INFO", log_to_file=False).get_logger()
+class AudioProcessor:
+    """Service class for handling WhatsApp audio messages and transcription."""
+    
+    def __init__(self):
+        """Initialize the audio processor with required configurations."""
+        self.log = LoggerManager(name="audio_processor", level="INFO", log_to_file=False).get_logger()
+        self.http_timeout = 60.0
+        self.whisper_model = "whisper-1"
+        self.whatsapp_api_version = "v18.0"
 
-async def download_audio_from_whatsapp(media_id: str) -> bytes:
-    """
-    Descarga un audio de WhatsApp API usando el media_id.
-    """
-    try:
-        async with httpx.AsyncClient() as client:
-            # 1. Obtener la URL de descarga
-            media_response = await client.get(
-                f"https://graph.facebook.com/v18.0/{media_id}",
-                headers={"Authorization": f"Bearer {HEYOO_TOKEN}"}
+    async def _make_http_request(
+        self, 
+        url: str, 
+        method: str = "GET", 
+        headers: Optional[dict] = None, 
+        files: Optional[dict] = None,
+        data: Optional[dict] = None
+    ) -> httpx.Response:
+        """Make an HTTP request with timeout handling."""
+        async with httpx.AsyncClient(timeout=self.http_timeout) as client:
+            response = await client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                files=files,
+                data=data
             )
-            media_response.raise_for_status()
+            response.raise_for_status()
+            return response
+
+    async def download_audio_from_whatsapp(self, media_id: str) -> Optional[bytes]:
+        """Download an audio file from WhatsApp API using the media ID."""
+        try:
+            # Get download URL
+            headers = {"Authorization": f"Bearer {HEYOO_TOKEN}"}
+            media_response = await self._make_http_request(
+                f"https://graph.facebook.com/{self.whatsapp_api_version}/{media_id}",
+                headers=headers
+            )
             media_url = media_response.json()["url"]
-            log.info(f"🎯 URL de audio obtenida: {media_url}")
+            self.log.info("🎯 Audio URL obtained successfully")
 
-            # 2. Descargar el archivo real
-            audio_response = await client.get(
+            # Download actual audio file
+            audio_response = await self._make_http_request(
                 media_url,
-                headers={"Authorization": f"Bearer {HEYOO_TOKEN}"}
+                headers=headers
             )
-            audio_response.raise_for_status()
-            log.info(f"✅ Audio descargado exitosamente")
+            self.log.info("✅ Audio downloaded successfully")
             return audio_response.content
-    except Exception as e:
-        log.error(f"❌ Error descargando audio: {e}")
-        return None
 
-async def transcribe_audio_with_whisper(audio_bytes: bytes) -> str:
-    """
-    Envía un audio a OpenAI Whisper API para obtener la transcripción.
-    """
-    try:
-        # Usamos un archivo temporal
-        with tempfile.NamedTemporaryFile(suffix=".ogg") as temp_audio:
-            temp_audio.write(audio_bytes)
-            temp_audio.seek(0)
+        except httpx.HTTPStatusError as e:
+            self.log.error(f"❌ HTTP error downloading audio: {e.response.status_code}")
+            return None
+        except Exception as e:
+            self.log.error(f"❌ Error downloading audio: {str(e)}")
+            return None
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                files = {
-                    'file': (temp_audio.name, temp_audio.read(), 'audio/ogg')
-                }
+    async def transcribe_audio_with_whisper(self, audio_bytes: bytes) -> str:
+        """Send audio to OpenAI Whisper API for transcription."""
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".ogg") as temp_audio:
+                temp_audio.write(audio_bytes)
+                temp_audio.seek(0)
+
+                files = {'file': (temp_audio.name, temp_audio.read(), 'audio/ogg')}
                 data = {
-                    'model': 'whisper-1',
+                    'model': self.whisper_model,
                     'response_format': 'text'
                 }
-                headers = {
-                    'Authorization': f"Bearer {OPENAI_API_KEY}"
-                }
+                headers = {'Authorization': f"Bearer {OPENAI_API_KEY}"}
 
-                response = await client.post(
+                response = await self._make_http_request(
                     "https://api.openai.com/v1/audio/transcriptions",
+                    method="POST",
                     headers=headers,
                     files=files,
                     data=data
                 )
-                response.raise_for_status()
 
                 transcription = response.text.strip()
-                log.info(f"✅ Transcripción recibida")
+                self.log.info("✅ Transcription received successfully")
                 return transcription
 
-    except Exception as e:
-        log.error(f"❌ Error transcribiendo audio con Whisper: {e}")
-        return "No se pudo transcribir el audio."
+        except httpx.HTTPStatusError as e:
+            self.log.error(f"❌ HTTP error transcribing audio: {e.response.status_code}")
+            return "No se pudo transcribir el audio debido a un error de comunicación."
+        except Exception as e:
+            self.log.error(f"❌ Error transcribing audio: {str(e)}")
+            return "No se pudo transcribir el audio."
 
-async def process_audio_message(media_id: str) -> str:
-    """
-    Flujo completo: descarga el audio, lo transcribe y devuelve el texto.
-    """
-    audio_data = await download_audio_from_whatsapp(media_id)
-    if not audio_data:
-        return "No se pudo obtener el audio."
+    async def process_audio_message(self, media_id: str) -> str:
+        """Complete flow: download audio, transcribe it and return the text."""
+        audio_data = await self.download_audio_from_whatsapp(media_id)
+        if not audio_data:
+            return "No se pudo obtener el audio del mensaje."
 
-    transcription = await transcribe_audio_with_whisper(audio_data)
-    return transcription
+        return await self.transcribe_audio_with_whisper(audio_data)
+
+# Create a singleton instance
+audio_processor = AudioProcessor()

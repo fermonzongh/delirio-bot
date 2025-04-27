@@ -8,7 +8,8 @@ async def extract_name_with_llm(user_message: str) -> str:
     """
     prompt = (
         "Dado el siguiente mensaje de un usuario, si puedes identificar un nombre propio de persona, "
-        "devuelve solamente ese nombre en una sola línea. Si no hay nombre, o la persona no quiere dar su nombre, responde 'NO'.\n\n"
+        "devuelve solamente ese nombre en una sola línea. Intenta corregir errores de ortografía. "
+        "Si no hay nombre, o la persona no quiere dar su nombre, responde 'NO'.\n\n"
         f"Mensaje: {user_message}\n\n"
         "Respuesta:"
     )
