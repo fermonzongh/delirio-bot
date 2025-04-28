@@ -7,8 +7,9 @@ async def extract_name_with_llm(user_message: str) -> str:
     Retorna el nombre o None si no se puede extraer.
     """
     prompt = (
-        "Dado el siguiente mensaje de un usuario, si puedes identificar un nombre propio de persona, "
-        "devuelve solamente ese nombre en una sola línea. Intenta corregir errores de ortografía. "
+        "Dado el siguiente mensaje de un usuario, si puedes identificar el nombre del remitente, "
+        "devuelve solamente ese nombre en una sola línea. Ten en cuenta si la persona pide hablar con alguien, no es su nombre. "
+        "Intenta corregir errores de ortografía. "
         "Si no hay nombre, o la persona no quiere dar su nombre, responde 'NO'.\n\n"
         f"Mensaje: {user_message}\n\n"
         "Respuesta:"

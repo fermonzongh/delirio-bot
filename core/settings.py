@@ -12,6 +12,7 @@ CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY","")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-3-7-sonnet-20250219")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY","")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "")
 
 # Google Drive
 PRODUCT_LIST_FILE_ID = os.getenv("PRODUCT_LIST_FILE_ID")
