@@ -31,6 +31,7 @@ def validate_message_content(user_message: str, sender_phone: str, wa_client: Wh
 
     if len(user_message) > MAX_MESSAGE_LENGTH:
         log.warning(f"⚠️ Mensaje demasiado largo de {sender_phone}: {len(user_message)} caracteres")
+        log.warning(f"Mensaje: {user_message}")
         wa_client.send_message("Tu mensaje es muy largo. ¿Podrías resumirlo un poco? ✂️", sender_phone)
         return {"valid": False, "status": "long_message"}
 

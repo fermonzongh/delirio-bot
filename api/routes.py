@@ -145,7 +145,6 @@ class WhatsAppRouter:
             if saludo:
                 self.wa_client.send_message(saludo, sender_phone)
                 conversation_service.add_to_conversation_history(sender_phone, "assistant", saludo)
-                self.log.info(f"👋 Saludo enviado a {sender_phone}: {saludo}")
 
             # Add user message to history
             conversation_service.add_to_conversation_history(sender_phone, "user", user_message)
