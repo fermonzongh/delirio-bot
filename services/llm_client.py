@@ -36,7 +36,7 @@ class LLMClient:
         self.log = LoggerManager(name="llm_client", level="INFO", log_to_file=False).get_logger()
         self.wa_client = WhatsApp(token=HEYOO_TOKEN, phone_number_id=HEYOO_PHONE_ID)
         self.http_timeout = 30.0
-        self.max_retries = 3
+        self.max_retries = 5
         self._initialized = True
 
     async def _make_http_request(self, url: str, headers: Dict[str, str], json_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -144,6 +144,13 @@ class LLMClient:
             self.log.error(f"❌ Error también consultando Claude: {e}")
             return "Actualmente estamos experimentando dificultades. ¿Querés que te conecte con una persona?"
 
+    @staticmethod
+    def confirmar_pedido(message: str) -> bool:
+        """Check if message is a confirmation of the order."""        
+        if message.lower() == "confirmar pedido":
+            return True
+        return False
+    
     @staticmethod
     def needs_human_takeover(message: str) -> bool:
         """Check if the message indicates a need for human intervention.
@@ -255,20 +262,57 @@ class LLMClient:
             return "Sin historial de conversación."
 
         prompt = "Resume esta conversación de manera concisa:\n\n"
-        for msg in conversation_history[-10:]:  # Last 10 messages only
+        for msg in conversation_history[-20:]:  # Last 20 messages only
             prompt += f"{msg['role']}: {msg['content']}\n"
 
         return await self.call_llm_simple(prompt)
+    
+    async def get_order_summary(self, conversation_history: List[Dict[str, Any]]) -> str:
+        """Generate a summary of the order from conversation history.
+        
+        Args:
+            conversation_history: List of previous messages in the conversation
 
-    async def notify_owner(self, customer_phone: str, conversation_history: List[Dict[str, Any]]) -> None:
+        Returns:
+            str: A summary of the order
+        """
+        if not conversation_history:
+            return "Sin historial de conversación."
+
+        prompt = """Devuelve una lista en formato JSON con los productos que el cliente quiere comprar.
+        Cada producto debe tener los campos "nombre" (string) y "cantidad" (entero).
+        Si no hay productos, responde exactamente con el texto: "No hay productos en el pedido".
+
+        Ejemplo de respuesta si hay productos:
+        [
+            {"nombre": "Kituchos en aceite 300g", "cantidad": 1},
+            {"nombre": "Salpicón 300g", "cantidad": 1},
+            {"nombre": "RibRub Areco 130g", "cantidad": 1}
+        ]
+
+        Ejemplo de respuesta si no hay productos:
+        No hay productos en el pedido.
+
+        Texto a procesar:"""
+        for msg in conversation_history[-20:]:  # Last 20 messages only
+            prompt += f"{msg['role']}: {msg['content']}\n"
+
+        self.log.debug(f"📝 Prompt para resumen del pedido: {prompt}")
+
+        return await self.call_llm_simple(prompt)
+    
+
+    async def notify_owner(self, customer_phone: str, name: str, summary: str, order_summary: str = None) -> str:
         """Notify the owner about a conversation that needs attention.
         
         Args:
             customer_phone: The customer's phone number
             conversation_history: List of previous messages in the conversation
+            order_summary: A summary of the order
         """
-        summary = await self.get_summary_from_conversation_history(conversation_history)
-        message = f"🚨 *Atención requerida*\n\nCliente: {customer_phone}\n\nResumen:\n{summary}"
+        message = f"🚨 *Atención requerida*\n\nCliente: {customer_phone}\n\nNombre: {name}\n\nResumen:\n{summary}\n\n"
+        if order_summary:
+            message += f"\n\nPedido:\n{order_summary}"
         
         try:
             self.wa_client.send_message(
@@ -278,6 +322,7 @@ class LLMClient:
             self.log.info(f"✅ Notificación enviada al dueño sobre {customer_phone}")
         except Exception as e:
             self.log.error(f"❌ Error notificando al dueño: {e}")
+        return message
 
 # Create a singleton instance
 llm_client = LLMClient()

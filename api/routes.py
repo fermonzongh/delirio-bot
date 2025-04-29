@@ -151,16 +151,37 @@ class WhatsAppRouter:
 
             # Try to extract name if not known
             if not conversation_service.get_name_from_conversation(sender_phone):
-                self.log.info(f"📝 Nombre no encontrado en conversación para {sender_phone}. Intentando extraer...")
-                detected_name = await extract_name_with_llm(user_message)
-                if detected_name:
-                    conversation_service.set_customer_name(sender_phone, detected_name)
-                    conversation_service.add_to_conversation_history(
-                        sender_phone,
-                        "assistant",
-                        f"Guardé tu nombre como {detected_name}"
-                    )
-                    self.log.info(f"📝 Nombre aprendido para {sender_phone}: {detected_name}")
+                if not saludo:
+                    if not conversation_service.get_name_tried(sender_phone):
+                        self.log.info(f"📝 Nombre no encontrado en conversación para {sender_phone}. Intentando extraer...")
+                        detected_name = await extract_name_with_llm(user_message)
+                        if detected_name:
+                            conversation_service.set_customer_name(sender_phone, detected_name)
+                            conversation_service.add_to_conversation_history(
+                                sender_phone,
+                                "assistant",
+                                f"Guardé tu nombre como {detected_name}"
+                            )
+                            self.log.info(f"📝 Nombre aprendido para {sender_phone}: {detected_name}")
+                        else:
+                            conversation_service.set_name_tried(sender_phone, True)
+                            conversation_service.set_customer_name(sender_phone, None)
+
+            # Check for confirmation of order
+            if llm_client.confirmar_pedido(user_message):
+                self.log.info(f"📝 Pedido confirmado para {sender_phone}")
+                self.wa_client.send_message(
+                    "¡Gracias! Tu pedido ha sido confirmado. Nos pondremos en contacto contigo pronto.",
+                    sender_phone
+                )
+                order_summary = await llm_client.get_order_summary(conversation_service.get_conversation_history(sender_phone))
+                self.log.debug(f"📝 Resumen del pedido: {order_summary}")
+                summary = await llm_client.get_summary_from_conversation_history(conversation_service.get_conversation_history(sender_phone))
+                name = conversation_service.get_name_from_conversation(sender_phone)
+                response_text = await llm_client.notify_owner(sender_phone, name, summary, order_summary)
+                conversation_service.add_to_conversation_history(sender_phone, "assistant", response_text)
+                conversation_service.set_order_confirmed(sender_phone, order_summary, True)
+                return {"status": "order_confirmed"}, 200
 
             # Check for human takeover
             if llm_client.needs_human_takeover(user_message):
@@ -170,7 +191,10 @@ class WhatsAppRouter:
                     "Una persona se contactará contigo a la brevedad. Mientras tanto puedes consultarme lo que necesites.",
                     sender_phone
                 )
-                await llm_client.notify_owner(sender_phone, conversation_service.get_conversation_history(sender_phone))
+                summary = await llm_client.get_summary_from_conversation_history(conversation_service.get_conversation_history(sender_phone))
+                name = conversation_service.get_name_from_conversation(sender_phone)
+                response_text = await llm_client.notify_owner(sender_phone, name, summary)
+                conversation_service.add_to_conversation_history(sender_phone, "assistant", response_text)
                 return {"status": "escalated"}, 200
 
             # Get AI response

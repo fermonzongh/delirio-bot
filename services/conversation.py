@@ -1,6 +1,7 @@
 import os
 import json
 import time
+
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -210,6 +211,37 @@ class ConversationService:
         if not name:
             self.log.warning(f"⚠️ Nombre no encontrado en conversación para {phone_number}")
         return name
+    
+    def get_name_tried(self, phone_number: str) -> bool:
+        """Check if the customer name has been tried to be extracted."""
+        data = self.load_conversation_file(phone_number)
+        if not data:
+            return False
+
+        name_tried = data.get("name_tried", False)
+
+        return name_tried
+    
+    def set_name_tried(self, phone_number: str, tried: bool) -> None:
+        """Set the customer name tried status."""
+        data = self.load_conversation_file(phone_number)
+        data["name_tried"] = tried
+        self.save_conversation_file(phone_number, data)
+
+    def format_order_summary(self, order_summary: str) -> List[Dict[str, Any]]:
+        """Format the order summary."""
+        return json.loads(order_summary)
+    
+    def set_order_confirmed(self, phone_number: str, order_summary: str, confirmed: bool) -> None:
+        """Set the order confirmed status."""
+        data = self.load_conversation_file(phone_number)
+
+        data["order_confirmed"] = {
+            "confirmed": confirmed,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "order_summary": self.format_order_summary(order_summary)
+        }
+        self.save_conversation_file(phone_number, data)
 
     def get_conversation_history(self, phone_number: str, max_age_seconds: int = 84600) -> List[Dict[str, Any]]:
         """Get the conversation history for a phone number.
